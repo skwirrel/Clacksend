@@ -1,4 +1,4 @@
-# Colour Encoding for IoT Device Configuration
+# ClackSend - Colour Encoding for IoT Device Configuration
 
 ## Introduction
 This page provides a proof of concept for a simple way of encoding configuration data such that it can be read using cheap components on an IoT device
