@@ -1,0 +1,309 @@
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+</head>
+<body>
+    <div id="chooser">
+        <h1>Colour Encoding for IoT Device Configuration</h1>
+        <h2>Introduction</h2>
+        <p>This page provides a proof of concept for a simple way of encoding configuration data such that it can be read using cheap components on an IoT device</p>
+        <h2>TLDR</h2>
+        <p>To cut straight to the demo click the "Writer" button on one device, then load this page on another device which has a webcam and point the first device at the camera of the second such that the 9 colour squares completely fill the camera view. The message entered on the writer device will be transmitted to the reader device.</p>
+        <button style="font-size:20px" onClick="reader()">READER</button>
+        <button style="font-size:20px" onClick="writer()">WRITER</button>
+        
+        <h2>The Problem</h2>
+        <p>IoT devices often need to connect to a WiFi network. To do this they need to know the SSID of the WiFi network and usually also a password. IoT devices often have minimal, or zero user interface (i.e. no keyboard or screen), as such it is not possible for the user to key in the details. A typical approach is for the device to start up as a WiFi access point. The user must then disconnect their mobile phone/laptop from their normal WiFi network, connect to the access point created by the IoT device, use some web interface provided by the IoT device to pass the WiFi connection details to it. The IoT device then stops being an access point and the user has to reconnect their mobile phone/laptop back to their normal WiFi network.</p>
+        <p>This is a convoluted process both for the user and for the IoT device (which needs to have all the software to operate an access point and a webserver - solely for the purposes of this very infrequent process).</p>
+        
+        <h2>Suggested Solution</h2>
+        <p>The solution demonstrated here is to use a simple colour code to transfer the data. The user keys the WiFi SSID and password into a web page (the password need never actually leave the browser) or an app on their mobile phone/laptop. Code on the web page/app converts the configuration data into a sequence of colour flashes which are displayed on the screen. The user then holds the IoT device up to the screen which detects the colour sequence and decodes the data.</p>
+        <p>Receiving this data requires just a simple colour sensing module, or 3 photoresistors with red green and blue filters. In the case of the Raspberry Pico this comes with 3 analogue to digital converters which are ideal for this puprose.</p>
+    </div>
+    <div id="reader" style="position: relative; display: none">
+        <div style="position: relative; display: inline-block;">
+            <video width="400"></video>
+            <table cellspacing="0" cellpadding="0" style="transform: translate( -50%, -50% ); position: absolute; left:50%;top:50%">
+                <tr>
+                    <td style="width:10px; height: 10px; border: 1px solid black; border-width:0 1px 1px 0;"></td>
+                    <td style="width:10px; height: 10px; border: 1px solid black; border-width:0 0 1px 0;"></td>
+                </tr>
+                <tr>
+                    <td style="width:10px; height: 10px; border: 1px solid black; border-width:0 1px 0 0;"></td>
+                    <td style="width:10px; height: 10px; border: none"></td>
+                </tr>
+            </table>
+        </div>
+        <div style="margin-left: 20px; position:absolute; display:inline-block; top:0">
+            Raw bits:<br />
+            <input type="text" id="rawBitStream" size="50" /><br /><br />
+            Raw bytes:<br />
+            <input type="text" id="rawByteStream" size="50" /><br /><br />
+            Validated messages:<br />
+            <textarea id="output" rows="5" cols="30" style="font-size:20px"></textarea>
+        </div>
+        
+        <canvas style="display:none" width=480 height=360></canvas>
+    </div>
+    <div id="writer" style="display: none">
+        Message: <input id="message" type="text" value="Hello World!"/><br />
+        <table style="width:150vh;height:100vh" cellpadding="0" cellspacing="0">
+            <tr>
+                <td height="35%" width="35%" style="background-color:#f00"></td>
+                <td height="35%" width="30%" style="background-color:#0f0"></td>
+                <td height="35%" width="35%" style="background-color:#00f"></td>
+            </tr>
+            <tr>
+                <td height="30%" width="35%" style="background-color:#fff"></td>
+                <td id="block" height="30%" width="30%" style="background-color:#0f0"></td>
+                <td height="30%" width="35%" style="background-color:#000"></td>
+            </tr>
+            <tr>
+                <td height="35%" width="35%" style="background-color:#00f"></td>
+                <td height="35%" width="30%" style="background-color:#0f0"></td>
+                <td height="35%" width="35%" style="background-color:#f00"></td>
+            </tr>
+        </table>
+    </div>
+    
+    <script>
+
+    function computeFletcher16( message ) {
+          let sum1 = 0xff, sum2 = 0xff;
+          let i = 0;
+          let len = message.length;
+
+          while (len) {
+            var tlen = len > 20 ? 20 : len;
+            len -= tlen;
+            do {
+              sum2 += sum1 += message.charCodeAt(i++);
+            } while (--tlen);
+            sum1 = (sum1 & 0xff) + (sum1 >> 8);
+            sum2 = (sum2 & 0xff) + (sum2 >> 8);
+          }
+          /* Second reduction step to reduce sums to 8 bits */
+          sum1 = (sum1 & 0xff) + (sum1 >> 8);
+          sum2 = (sum2 & 0xff) + (sum2 >> 8);
+          return String.fromCharCode(sum1) + String.fromCharCode(sum2);
+    }
+    
+    function reader() {
+        
+        document.querySelector('#chooser').style.display = 'none';
+        document.querySelector('#reader').style.display = 'block';
+        
+        var rawBitStreamDisplay = document.querySelector('#rawBitStream');
+        var rawByteStreamDisplay = document.querySelector('#rawByteStream');;
+        
+        const bitLookups = {
+            R : {
+                G : '00',
+                B : '01', 
+                D : '10',
+                L : '11',
+            },
+            G : {
+                R : '00',
+                B : '01',
+                D : '10',
+                L : '11',
+            },
+            B : {
+                R : '00',
+                G : '01',
+                D : '10',
+                L : '11',
+            },
+            D : {
+                R : '00',
+                G : '01',
+                B : '10',
+                L : '11',
+            },
+            L : {
+                R : '00',
+                G : '01',
+                B : '10',
+                D : '11',
+            },
+            
+        };
+
+        const output = document.querySelector('#output');
+        const video = document.querySelector('video');
+        const canvas = document.querySelector('canvas');
+        const context = canvas.getContext('2d');
+        
+        if(navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+            navigator.mediaDevices.getUserMedia({ video: true }).then(function(stream) {
+                video.srcObject = stream;
+                video.play();
+                
+                var lastColour = 'R';
+                var lastRecordedColour = 'R';
+                var thisColourCount=0;
+
+                var gotLock = false;
+                var bitStream = '';
+                var rawBitStream = '';
+
+                window.setInterval(function() {
+                    
+                    if (!video.videoWidth) return;
+                    else {
+                        /* set the canvas to the dimensions of the video feed */
+                        canvas.width = video.videoWidth;
+                        canvas.height = video.videoHeight;
+                    }
+
+                    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+                    const frame = context.getImageData(canvas.width/2, canvas.height/2, 1,1);
+                    const rgb = frame.data;
+                    let total = rgb[0] + rgb[1] + rgb[2];
+                    
+                    let colour;
+                    if (total<250) colour = 'D';
+                    else if (total>600) colour = 'L';
+                    else {
+                        if (rgb[0]>rgb[1]) {
+                            if (rgb[2]>rgb[0]) colour='B';
+                            else colour='R';
+                        } else {
+                            if (rgb[2]>rgb[1]) colour='B';
+                            else colour='G';
+                        }
+                    }
+
+                    if (lastColour!=colour) {
+                        lastColour = colour;
+                        thisColourCount = 0;
+                    } else {
+                        thisColourCount++
+                        if (thisColourCount>5 && thisColourCount<9999) {
+                            thisColourCount=9999;
+                            if (lastRecordedColour!=colour) {
+                                bitStream += bitLookups[lastRecordedColour][colour];
+                                rawBitStream += bitLookups[lastRecordedColour][colour];
+                                lastRecordedColour=colour;
+                            }
+                        }
+                    }
+                },10);
+
+                var message = '';
+        
+                window.setInterval(function() {
+                    var match = rawBitStream.match(/^.*?1{8}0/);
+                    if (!gotLock) console.log('Looking for lock in: '+bitStream);
+                    if (match) {        
+                        gotLock = 1;
+                        rawBitStream = rawBitStream.substr(match[0].length);
+                        bitStream = rawBitStream;
+                        console.log( 'initial bitstream is :'+bitStream );
+                        if (message.length) {
+                            let checksum = message.substr(-2);
+                            message = message.substr(0,message.length-2);
+                            if (checksum!==computeFletcher16(message)) {
+                                console.log('Message checksum failed: '+message+checksum);
+                            } else {
+                                output.value += message + '\n';
+                            }
+                        }
+                        message = '';
+                        rawByteStreamDisplay.value = '';
+                    } else if (gotLock) {
+                        while ( bitStream.length>7) {
+                            var byte = bitStream.substr(0,8);
+                            bitStream = bitStream.substr(8);
+                            if (byte=='11111111') continue;
+                            let char = String.fromCharCode( parseInt( byte,2 ));
+                            message += char;
+                            rawByteStreamDisplay.value += char;
+                        }
+                    }
+                    rawBitStreamDisplay.value = rawBitStream;
+                },500);
+            });
+        }
+    }
+    
+    function writer() {
+        document.querySelector('#chooser').style.display = 'none';
+        document.querySelector('#writer').style.display = 'block';
+        document.querySelector('body').style.backgroundColor = '#000';
+        document.querySelector('body').style.color = '#fff';
+
+        const bitLookups = {
+            R : {
+                '00' : 'G' ,
+                '01' : 'B' , 
+                '10' : 'D' ,
+                '11' : 'L' ,
+            },
+            G : {
+                '00' : 'R' ,
+                '01' : 'B' ,
+                '10' : 'D' ,
+                '11' : 'L' ,
+            },              
+            B : {
+                '00' : 'R' ,
+                '01' : 'G' ,
+                '10' : 'D' ,
+                '11' : 'L' ,
+            },              
+            D : {
+                '00' : 'R' ,
+                '01' : 'G' ,
+                '10' : 'B' ,
+                '11' : 'L' ,
+            },              
+            L : {
+                '00' : 'R' ,
+                '01' : 'G' ,
+                '10' : 'B' ,
+                '11' : 'D' ,
+            },
+            
+        };
+
+        var lastColour = 'R';
+        
+        const style=document.querySelector('#block').style;
+        var count=0;
+        const colors={
+            R:'f00',
+            G:'090',
+            B:'00f',
+            D:'000',
+            L:'ccc'
+        };
+        
+        var streamPosition = 0;
+        var bitStream = '';
+
+        window.setInterval(function(){
+            if (!bitStream.length) {
+                var message = document.querySelector('#message').value;
+                console.log('Checksum is: '+computeFletcher16(message));
+                message += computeFletcher16(message);
+                for (var i=0; i<message.length; i++) {
+                    bitStream += message.charCodeAt(i).toString(2).padStart(8,'0');
+                }
+                bitStream = '1111111110'+bitStream;
+                streamPosition = 0;
+            }
+            let bits = bitStream.substr(streamPosition,2);
+            bitStream = bitStream.substr(2);
+            
+            lastColour = bitLookups[lastColour][bits];
+            style.backgroundColor='#'+colors[lastColour];
+        },120);
+        
+    }
+    
+    </script>
+
+</body>
+</html>
