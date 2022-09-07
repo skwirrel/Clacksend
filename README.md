@@ -1,4 +1,4 @@
-# Clacksen - Colour Encoding for IoT Device Configuration
+# Colour Encoding for IoT Device Configuration
 
 ## Introduction
 This page provides a proof of concept for a simple way of encoding configuration data such that it can be read using cheap components on an IoT device
@@ -14,7 +14,10 @@ This is a convoluted process both for the user and for the IoT device (which nee
 ## Solution
 The solution demonstrated here is to use a simple colour code to transfer the data. The user keys the WiFi SSID and password into a web page (the password need never actually leave the browser) or an app on their mobile phone/laptop. Code on the web page/app converts the configuration data into a sequence of colour flashes which are displayed on the screen. The user then holds the IoT device up to the screen which detects the colour sequence and decodes the data.
 
-Receiving this data requires just a simple colour sensing module, or 3 photoresistors with red green and blue filters. In the case of the Raspberry Pico this comes with 3 analogue to digital converters which are ideal for this puprose.
+Receiving this data requires just a simple colour sensing module, or 3 photoresistors with red green and blue filters. In the case of the Raspberry Pico this comes with 3 analogue to digital converters which are ideal for this purpose.
 
 ## Demo
-The demonstration provides a proof of concept for the data transmission at the 
+The demonstration provides a proof of concept for the data transmission at the heart of the process. The demo uses a webcam instead of a light sensor - although it only actually reads the colour from the single pixel at the centre of the video frame.
+
+### Why is it so slow?
+The demo is limited by the speed of javascript and also the frame rate of the camera. Using simple colour sensor electronics ought to allow for a faster data rate - although I suspect that the limiting factor would then be the refresh rate on the screen being used to display the code. Either way, even the slow data rate here - about 1 byte per second - should provide a usable mechanism for transmitting the limited amount of data required for wireless network configuration.
