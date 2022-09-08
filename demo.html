@@ -6,6 +6,7 @@
     <div id="chooser">
         <h1>Colour Encoding for IoT Device Configuration</h1>
         <p>Click the "Writer" button on one device, then load this page on another device which has a webcam and point the first device at the camera of the second such that the 9 colour squares completely fill the camera view. The message entered on the writer device will be transmitted to the reader device.</p>
+        <p>N.B. In reader mode you should see raw bits straight away, but you might have to wait 10s or so before raw bytes start appearing. This is because the code is waiting for the next start-of-message marker to come round.</p>
         <button style="font-size:20px" onClick="reader()">READER</button>
         <button style="font-size:20px" onClick="writer()">WRITER</button>
     </div>
@@ -169,7 +170,7 @@
                         thisColourCount = 0;
                     } else {
                         thisColourCount++
-                        if (thisColourCount>5 && thisColourCount<9999) {
+                        if (thisColourCount>4 && thisColourCount<9999) {
                             thisColourCount=9999;
                             if (lastRecordedColour!=colour) {
                                 bitStream += bitLookups[lastRecordedColour][colour];
@@ -212,7 +213,7 @@
                         }
                     }
                     rawBitStreamDisplay.value = rawBitStream;
-                },500);
+                },30);
             });
         }
     }
@@ -263,7 +264,7 @@
         var count=0;
         const colors={
             R:'f00',
-            G:'090',
+            G:'0f0',
             B:'00f',
             D:'000',
             L:'ccc'
@@ -288,7 +289,7 @@
             
             lastColour = bitLookups[lastColour][bits];
             style.backgroundColor='#'+colors[lastColour];
-        },120);
+        },150);
         
     }
     
