@@ -24,3 +24,6 @@ The demonstration provides a proof of concept for the data transmission at the h
 
 ### Why is it so slow?
 The demo is limited by the speed of javascript and also the frame rate of the camera. Using simple colour sensor electronics ought to allow for a faster data rate - although I suspect that the limiting factor would then be the refresh rate on the screen being used to display the code. Either way, even the slow data rate here - about 1 byte per second - should provide a usable mechanism for transmitting the limited amount of data required for wireless network configuration.
+
+## Encoding
+The data is transmitted using a five-colour encoding scheme. Rather than relying on specific timing and synchronisation, the reader instead simply looks for colour changes. Using five colours means that when changing from any colour there are 4 options as to what the next colour will be. Four options gives 2 bits per change. The colour changes are converted into a stream of bits. The bit sequence 111111110 is used as a start-of-message marker (thus the ASCII character 255 cannot be sent). As soon as this marker has been encountered the code reads off eight bits at a time and converts these to the corresponding ASCII character. The last two bytes of the message are a [Fletcher16 checksum](https://en.wikipedia.org/wiki/Fletcher%27s_checksum) used to validate the message.
