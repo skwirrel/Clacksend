@@ -4,8 +4,8 @@
 </head>
 <body>
     <div id="chooser">
-        <h1>Colour Encoding for IoT Device Configuration</h1>
-        <p>Click the "Writer" button on one device, then load this page on another device which has a webcam and point the first device at the camera of the second such that the 9 colour squares completely fill the camera view. The message entered on the writer device will be transmitted to the reader device.</p>
+        <h1>Color Encoding for IoT Device Configuration</h1>
+        <p>Click the "Writer" button on one device, then load this page on another device which has a webcam and point the first device at the camera of the second such that the 9 color squares completely fill the camera view. The message entered on the writer device will be transmitted to the reader device.</p>
         <p>N.B. In reader mode you should see raw bits straight away, but you might have to wait 10s or so before raw bytes start appearing. This is because the code is waiting for the next start-of-message marker to come round.</p>
         <button style="font-size:20px" onClick="reader()">READER</button>
         <button style="font-size:20px" onClick="writer()">WRITER</button>
@@ -25,6 +25,7 @@
             </table>
         </div>
         <div style="margin-left: 20px; position:absolute; display:inline-block; top:0">
+            Monochrome: <input id="colorSwitch" onChange="colorSwitch(this)" type="checkbox" value="1" /><br />
             Raw bits:<br />
             <input type="text" id="rawBitStream" size="50" /><br /><br />
             Raw bytes:<br />
@@ -36,7 +37,9 @@
         <canvas style="display:none" width=480 height=360></canvas>
     </div>
     <div id="writer" style="display: none">
-        Message: <input id="message" type="text" value="Hello World!"/><br />
+        Message: <input id="message" type="text" value="Hello World!"/>
+        Monochrome: <input id="colorSwitch" onChange="colorSwitch(this)" type="checkbox" value="1" />
+        <br />
         <table style="width:150vh;height:100vh" cellpadding="0" cellspacing="0">
             <tr>
                 <td height="35%" width="35%" style="background-color:#f00"></td>
@@ -78,6 +81,31 @@
           return String.fromCharCode(sum1) + String.fromCharCode(sum2);
     }
     
+    const colorLookup={
+        'color': {
+            R:'f00',
+            G:'0f0',
+            B:'00f',
+            D:'000',
+            L:'ccc'
+        },
+        'mono': {
+            R:'444',
+            G:'888',
+            B:'bbb',
+            D:'000',
+            L:'fff'
+        }
+    };
+    var colors;
+    var monochrome=false;
+
+    function colorSwitch(which) {
+        monochrome = which?which.checked:false;
+        console.log('Monochrome:',monochrome);
+        colors=colorLookup[monochrome?'mono':'color'];
+    }
+
     function reader() {
         
         document.querySelector('#chooser').style.display = 'none';
@@ -130,9 +158,9 @@
                 video.srcObject = stream;
                 video.play();
                 
-                var lastColour = 'R';
-                var lastRecordedColour = 'R';
-                var thisColourCount=0;
+                var lastColor = 'R';
+                var lastRecordedColor = 'R';
+                var thisColorCount=0;
 
                 var gotLock = false;
                 var bitStream = '';
@@ -152,30 +180,34 @@
                     const rgb = frame.data;
                     let total = rgb[0] + rgb[1] + rgb[2];
                     
-                    let colour;
-                    if (total<250) colour = 'D';
-                    else if (total>600) colour = 'L';
-                    else {
-                        if (rgb[0]>rgb[1]) {
-                            if (rgb[2]>rgb[0]) colour='B';
-                            else colour='R';
-                        } else {
-                            if (rgb[2]>rgb[1]) colour='B';
-                            else colour='G';
+                    let color;
+                    if (monochrome) {
+                        console.log(total);
+                    } else {
+                        if (total<250) color = 'D';
+                        else if (total>600) color = 'L';
+                        else {
+                            if (rgb[0]>rgb[1]) {
+                                if (rgb[2]>rgb[0]) color='B';
+                                else color='R';
+                            } else {
+                                if (rgb[2]>rgb[1]) color='B';
+                                else color='G';
+                            }
                         }
                     }
 
-                    if (lastColour!=colour) {
-                        lastColour = colour;
-                        thisColourCount = 0;
+                    if (lastColor!=color) {
+                        lastColor = color;
+                        thisColorCount = 0;
                     } else {
-                        thisColourCount++
-                        if (thisColourCount>4 && thisColourCount<9999) {
-                            thisColourCount=9999;
-                            if (lastRecordedColour!=colour) {
-                                bitStream += bitLookups[lastRecordedColour][colour];
-                                rawBitStream += bitLookups[lastRecordedColour][colour];
-                                lastRecordedColour=colour;
+                        thisColorCount++
+                        if (thisColorCount>4 && thisColorCount<9999) {
+                            thisColorCount=9999;
+                            if (lastRecordedColor!=color) {
+                                bitStream += bitLookups[lastRecordedColor][color];
+                                rawBitStream += bitLookups[lastRecordedColor][color];
+                                lastRecordedColor=color;
                             }
                         }
                     }
@@ -219,6 +251,8 @@
     }
     
     function writer() {
+        colorSwitch();
+
         document.querySelector('#chooser').style.display = 'none';
         document.querySelector('#writer').style.display = 'block';
         document.querySelector('body').style.backgroundColor = '#000';
@@ -258,20 +292,14 @@
             
         };
 
-        var lastColour = 'R';
+        var lastColor = 'R';
         
         const style=document.querySelector('#block').style;
         var count=0;
-        const colors={
-            R:'f00',
-            G:'0f0',
-            B:'00f',
-            D:'000',
-            L:'ccc'
-        };
         
         var streamPosition = 0;
         var bitStream = '';
+        var colorStream = '';
 
         window.setInterval(function(){
             if (!bitStream.length) {
@@ -282,13 +310,16 @@
                     bitStream += message.charCodeAt(i).toString(2).padStart(8,'0');
                 }
                 bitStream = '1111111110'+bitStream;
+                console.log(bitStream);
                 streamPosition = 0;
             }
             let bits = bitStream.substr(streamPosition,2);
             bitStream = bitStream.substr(2);
             
-            lastColour = bitLookups[lastColour][bits];
-            style.backgroundColor='#'+colors[lastColour];
+            lastColor = bitLookups[lastColor][bits];
+            colorStream += lastColor;
+            console.log(colorStream);
+            style.backgroundColor='#'+colors[lastColor];
         },150);
         
     }
