@@ -8,7 +8,8 @@
         <p>Click the "Writer" button on one device, then load this page on another device which has a webcam and point the first device at the camera of the second such that the 9 color squares completely fill the camera view. The message entered on the writer device will be transmitted to the reader device.</p>
         <p>N.B. In reader mode you should see raw bits straight away, but you might have to wait 10s or so before raw bytes start appearing. This is because the code is waiting for the next start-of-message marker to come round.</p>
         <button style="font-size:20px" onClick="reader()">READER</button>
-        <button style="font-size:20px" onClick="writer()">WRITER</button>
+        <button style="font-size:20px" onClick="writer('message')">WRITER</button>
+        <button style="font-size:20px" onClick="writer('test')">TEST SIGNAL</button>
     </div>
     <div id="reader" style="position: relative; display: none">
         <div style="position: relative; display: inline-block;">
@@ -90,10 +91,10 @@
             L:'ccc'
         },
         'mono': {
+            D:'000',
             R:'444',
             G:'888',
             B:'bbb',
-            D:'000',
             L:'fff'
         }
     };
@@ -115,37 +116,36 @@
         var rawByteStreamDisplay = document.querySelector('#rawByteStream');;
         
         const bitLookups = {
-            R : {
-                G : '00',
-                B : '01', 
-                D : '10',
-                L : '11',
-            },
-            G : {
-                R : '00',
-                B : '01',
-                D : '10',
-                L : '11',
-            },
-            B : {
-                R : '00',
-                G : '01',
-                D : '10',
-                L : '11',
-            },
             D : {
                 R : '00',
                 G : '01',
                 B : '10',
                 L : '11',
             },
-            L : {
-                R : '00',
+            R : {
+                D : '00',
                 G : '01',
-                B : '10',
-                D : '11',
+                B : '10', 
+                L : '11',
             },
-            
+            G : {
+                D : '00',
+                R : '01',
+                B : '10',
+                L : '11',
+            },
+            B : {
+                D : '00',
+                R : '01',
+                G : '10',
+                L : '11',
+            },
+            L : {
+                D : '00',
+                R : '01',
+                G : '10',
+                B : '11',
+            },
         };
 
         const output = document.querySelector('#output');
@@ -158,13 +158,14 @@
                 video.srcObject = stream;
                 video.play();
                 
-                var lastColor = 'R';
-                var lastRecordedColor = 'R';
+                var lastColor = 'D';
+                var lastRecordedColor = 'D';
                 var thisColorCount=0;
 
                 var gotLock = false;
                 var bitStream = '';
                 var rawBitStream = '';
+                var colorStream = '';
 
                 window.setInterval(function() {
                     
@@ -182,7 +183,12 @@
                     
                     let color;
                     if (monochrome) {
-                        console.log(total);
+                        // These values may need to be calibrated for your camera
+                        if (total<175) color='D';
+                        else if (total<385) color='R';
+                        else if (total<590) color='G';
+                        else if (total<710) color='B';
+                        else color='L';
                     } else {
                         if (total<250) color = 'D';
                         else if (total>600) color = 'L';
@@ -205,6 +211,8 @@
                         if (thisColorCount>4 && thisColorCount<9999) {
                             thisColorCount=9999;
                             if (lastRecordedColor!=color) {
+                                colorStream += color;
+                                console.log(colorStream);
                                 bitStream += bitLookups[lastRecordedColor][color];
                                 rawBitStream += bitLookups[lastRecordedColor][color];
                                 lastRecordedColor=color;
@@ -250,7 +258,7 @@
         }
     }
     
-    function writer() {
+    function writer(mode) {
         colorSwitch();
 
         document.querySelector('#chooser').style.display = 'none';
@@ -258,41 +266,47 @@
         document.querySelector('body').style.backgroundColor = '#000';
         document.querySelector('body').style.color = '#fff';
 
+        // DD DR DG DB DL | RD RR RG RB RL | GD GR GG GB GL | BD BR BG BB BL | LD LR LG LB LL
+        // The colour combo above corresponds to the bits below...
+        // -- 11 01 10 00 | 11 -- 01 10 00 | 11 01 -- 10 00 | 11 00 10 -- 01 | 11 01 10 00 --
+  
         const bitLookups = {
+            D : {
+                '00' : 'L' ,
+                '01' : 'G' ,
+                '10' : 'B' ,
+                '11' : 'R' ,
+            },              
             R : {
-                '00' : 'G' ,
-                '01' : 'B' , 
-                '10' : 'D' ,
-                '11' : 'L' ,
+                '11' : 'D' ,
+                '01' : 'G' ,
+                '10' : 'B' , 
+                '00' : 'L' ,
             },
             G : {
-                '00' : 'R' ,
-                '01' : 'B' ,
-                '10' : 'D' ,
-                '11' : 'L' ,
+                '01' : 'R' ,
+                '00' : 'L' ,
+                '10' : 'B' ,
+                '11' : 'D' ,
             },              
             B : {
                 '00' : 'R' ,
-                '01' : 'G' ,
-                '10' : 'D' ,
-                '11' : 'L' ,
-            },              
-            D : {
-                '00' : 'R' ,
-                '01' : 'G' ,
-                '10' : 'B' ,
-                '11' : 'L' ,
+                '01' : 'L' ,
+                '10' : 'G' ,
+                '11' : 'D' ,
             },              
             L : {
-                '00' : 'R' ,
-                '01' : 'G' ,
-                '10' : 'B' ,
+                '00' : 'B' ,
+                '01' : 'R' ,
+                '10' : 'G' ,
                 '11' : 'D' ,
             },
             
         };
 
-        var lastColor = 'R';
+        const testSequence = 'DRDGDBDLDBDLDGDL';
+        var testPos = 0;
+        var lastColor = 'D';
         
         const style=document.querySelector('#block').style;
         var count=0;
@@ -313,14 +327,18 @@
                 console.log(bitStream);
                 streamPosition = 0;
             }
-            let bits = bitStream.substr(streamPosition,2);
-            bitStream = bitStream.substr(2);
-            
-            lastColor = bitLookups[lastColor][bits];
+            if (mode=='test') {
+                lastColor = testSequence.substr(++testPos%testSequence.length,1);
+            } else {
+                let bits = bitStream.substr(streamPosition,2);
+                bitStream = bitStream.substr(2);
+                
+                lastColor = bitLookups[lastColor][bits];
+            }
             colorStream += lastColor;
-            console.log(colorStream);
+            console.log(colorStream.replaceAll('D','0').replaceAll('R','1').replaceAll('G','2').replaceAll('B','3').replaceAll('L','4'));
             style.backgroundColor='#'+colors[lastColor];
-        },150);
+        },70);
         
     }
     
