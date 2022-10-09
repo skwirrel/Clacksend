@@ -27,7 +27,7 @@ The graph above also include a rolling maximum line (pale blue) and a rolling mi
 Part of the problem here is the time it takes the light sensor to register the change - I think it takes it longer when the change is greater. So the shape of a 4 is different if the previous level was 3 compared to a 4 when the previous level was 0.
 
 The behaviour of the sensor seems much more predictable if we pull it back down to zero light level between each sample...
-![alt](realSignalPulsedLowBrigthness_closeUp.png)
+![realSignalPulsedLowBrigthness_closeUp](realSignalPulsedLowBrigthness_closeUp.png)
 
 Here we see a fairly consistent and easily distinguished shape to the data which is encoded as differing height peaks inbetween the zero periods. This is especially true if we look at the light blue line which shows the rolling maximum over 16 samples.
 
@@ -41,4 +41,47 @@ I think the way forward is as follows:
 This approach should allow us to encode 6 bits of data in a single pulse (1 bit in pulse duration, and 2 bits from pulse intensity).
 BTW the pulse lenght in the graph above is 70ms.
 
+# Threshold Detection
+
+As mentioned above, the other challenge is identifying the step levels. The approach I am taking to this is to take a number of samples and draw a frequency distribution histogram. The steps should be identified as 5 distinct peaks in this histogram. Since we are now adding a zero between every other data point there should be 4 times as many zeros as any of the other frequency peaks.
+
+The graph below shows the frequency distribution histogram for 1250 samples taken from a rolling maximum (over 8 samples).
+
+![ReadingFrequencyDistributionLowBrightness](ReadingFrequencyDistributionLowBrightness.png)
+
+The purple line shows the counts for each bucket and the blue lines show the computed threshold value.
+
+The threshold finder algorithm looks for the highest bucket, records this as a peak and then zero's out this peak. Then goes round again looking for the next highest bucket. It does this 5 times zeroing out each peak as it goes. Once it has 5 peaks it finds the midpoints between these which are the threshold values.
+
+The graph above shows that 4 thresholds have been identified, but the peaks are not very distinct due to the noisy signal.
+
+I wanted to improve on this so I processed the input samples as shown in the graph below...
+![findingMaximaAndMinima](findingMaximaAndMinima.png)
+(IGNORE THE LINE LABLES ON THIS GRAPH)
+
+This graph shows
+- In purple: the rolling maximum (computed over just 8 - just enough to remove the noise from the PWM) in purple. This curve is shifted back in time a bit so that it lines up with the next curve (because they are averaged over different periods)...
+- In blue: the rolling average of the rolling maximum (computed over 32 samples to give a nice smooth curve)
+- In pale blue: The rate of change of the blue line
+- In yellow: The points at which the pale blue line crosses the x axis - these are the maxima and minima
+
+If we now draw up a frequency distribution histogram again, but this time only take the readings from where we have a maximum or a minimum, then we should get much better clustering of the readings around the step levels. Furthermore we can multiply the maximum counts by 4 to comensate for the fact that there are more minimums than maximums.
+
+![ReadingFrequencyDistributionLowBrightness_improved](ReadingFrequencyDistributionLowBrightness_improved.png)
+
+We can optimise this even more as follows... if we look at the sample graph (2 graphs up) every time we encounter a maximum (blue peak), we start looking for the **highest** value we encounter until the next minimum (blue dip). Every time we encounter a minimum (blu dip) we start looking for the **lowest** value until the next maximum (blue peak). Bearing in mind that the purple line has been shifted and should be half a cycle to the right. This approach means that we are taking the highest value from the purple peaks and the lowest value from the purple dips. If we now draw the frequency histogram for these values we get the following...
+
+![ReadingFrequencyDistributionLowBrightness_improvedAgain](ReadingFrequencyDistributionLowBrightness_improvedAgain.png)
+
+This shows clear peaks at the step values (purple line) and the thresholds calculated between these (blue values).
+
+The same graph when measured with the screen at full brightness shows even more distinct peaks...
+
+![ReadingFrequencyDistributionHighBrightness_improvedAgain](ReadingFrequencyDistributionHighBrightness_improvedAgain.png)
+
+# Longer Pulses
+
+It would be nice to squeeze some extra data into the signal by varying the pulse length. If we now introduce longer pulses lets see what we get....
+![testSignalLowBrigthnessLongPulese_closeUp](testSignalLowBrigthnessLongPulese_closeUp.png)
+Oh dear. The maximum and minimum detection has broken during the flat periods - here we get lots of little local maxima and minima (yellow spikes).
 
